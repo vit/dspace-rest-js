@@ -23,9 +23,9 @@ class DSpaceElement {
         this.rawdata = data;
         var ancestors = [];
         if(data && data.parentCommunityList)
-            data.parentCommunityList.forEach(({name, uuid}) => { let type='communities'; ancestors.push({name, uuid, type}) });
+            data.parentCommunityList.map( items_mapper ).forEach(({name, uuid}) => { let type='communities'; ancestors.push({name, uuid, type}) });
         if(data && data.parentCollectionList)
-            data.parentCollectionList.forEach(({name, uuid}) => { let type='collections'; ancestors.push({name, uuid, type}) });
+            data.parentCollectionList.map( items_mapper ).forEach(({name, uuid}) => { let type='collections'; ancestors.push({name, uuid, type}) });
         this.ancestors = ancestors;
     }
 }
