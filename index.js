@@ -1,6 +1,14 @@
 'use strict';
 
-var axios = require('axios');
+const axios = require('axios');
+//import axios from 'axios';
+
+const items_mapper = type => {
+    return ({name, uuid, id}) => {
+        if( !uuid ) uuid=id;
+        return {name, uuid, type};
+    }
+};
 
 class DSpaceElement {
     constructor(dspace_base, rest_path, type='root', uuid=null) {
@@ -17,29 +25,38 @@ class DSpaceElement {
         this.ancestors = [];
         this.rawdata = null;
         this.items = [];
+        this.links_map = {};
     }
+
+    getLinkedItem(type, id) {
+        return this.links_map[''+type+'_'+id];
+    };
 
     _readAncestors(data) {
         this.rawdata = data;
-        var ancestors = [];
+        let ancestors = [];
         if(data && data.parentCommunityList)
-            data.parentCommunityList.map( items_mapper ).forEach(({name, uuid}) => { let type='communities'; ancestors.push({name, uuid, type}) });
+            ancestors = ancestors.concat( data.parentCommunityList.map( items_mapper('communities') ) );
+//            data.parentCommunityList.map( items_mapper('communities') ).forEach(({name, uuid, type}) => { ancestors.push({name, uuid, type}) });
         if(data && data.parentCollectionList)
-            data.parentCollectionList.map( items_mapper ).forEach(({name, uuid}) => { let type='collections'; ancestors.push({name, uuid, type}) });
+            ancestors = ancestors.concat( data.parentCollectionList.map( items_mapper('collections') ) );
+//            data.parentCollectionList.map( items_mapper('collections') ).forEach(({name, uuid, type}) => { ancestors.push({name, uuid, type}) });
         this.ancestors = ancestors;
     }
+    _buildLinksMap() {
+        this.links_map = this.ancestors.concat(this.communities, this.collections, this.items).reduce((obj, item) => {
+            obj[''+item.type+'_'+item.uuid] = item
+            return obj
+        }, {});
+        //console.log(this.links_map);
+    }
 }
-
-const items_mapper = ({name, uuid, id}) => {
-    if( !uuid ) uuid=id;
-    return {name, uuid};
-};
 
 class Root extends DSpaceElement {
     async load() {
         const url = this.rest_base + "/communities/top-communities";
         let response = await axios.get(url);
-        this.communities = response.data.map( items_mapper );
+        this.communities = response.data.map( items_mapper('communities') );
     }
 }
 class Community extends DSpaceElement {
@@ -47,11 +64,12 @@ class Community extends DSpaceElement {
         const url = this.rest_base + `/communities/${this.uuid}?expand=all`;
         let response = await axios.get(url);
         if(response.data.communities)
-            this.communities = response.data.communities.map( items_mapper );
+            this.communities = response.data.communities.map( items_mapper('communities') );
         if(response.data.collections)
-            this.collections = response.data.collections.map( items_mapper );
+            this.collections = response.data.collections.map( items_mapper('collections') );
         this.name = response.data.name;
         this._readAncestors(response.data);
+        this._buildLinksMap();
     }
 }
 class Collection extends DSpaceElement {
@@ -59,11 +77,12 @@ class Collection extends DSpaceElement {
         const url = this.rest_base + `/collections/${this.uuid}?expand=all`;
         let response = await axios.get(url);
         if(response.data.collections)
-            this.collections = response.data.collections.map( items_mapper );
+            this.collections = response.data.collections.map( items_mapper('collections') );
         if(response.data.items)
-            this.items = response.data.items.map( items_mapper );
+            this.items = response.data.items.map( items_mapper('items') );
         this.name = response.data.name;
         this._readAncestors(response.data);
+        this._buildLinksMap();
     }
 }
 class Item extends DSpaceElement {
@@ -78,6 +97,7 @@ class Item extends DSpaceElement {
             this.bitstreams = response.data.bitstreams.map(c => { c.retrieveUrl = dspace_base+c.link+"/retrieve"; return c; });
         this.name = response.data.name;
         this._readAncestors(response.data);
+        this._buildLinksMap();
     }
 }
 
@@ -113,7 +133,15 @@ class DSpace {
         await rez.load();
         return rez;
     }
+    getLinkedPreview( item, type, uuid ) {
+            const idx = ''+type+'_'+uuid;
+            return item && item.links_map ?
+                item.links_map[idx] :
+                null;
+    };
 }
 
 module.exports = DSpace;
 //module.exports.default = DSpace;
+
+//export default DSpace;
